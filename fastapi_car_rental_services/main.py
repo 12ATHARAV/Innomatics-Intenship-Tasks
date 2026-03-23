@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, status, Response, Query
 from typing import Optional, List, Dict
 from pydantic import BaseModel, Field
 from collections import Counter
+import asyncio
 
 app = FastAPI(
     title="SpeedRide Car Rentals",
@@ -299,35 +300,37 @@ def get_rentals():
 
     
 # Q8
+booking_lock = asyncio.Lock()
 @app.post('/rentals')
-def rent_car(req: RentalRequest, response: Response):
+async def rent_car(req: RentalRequest, response: Response):
     global rental_counter
-    
-    car = find_car(req.car_id)
-    if not car:
-        response.status_code = status.HTTP_404_NOT_FOUND
-        return {'error': 'Car not found'}
-    
-    if not car['is_available']:
-        return {'error': 'Car not available'}
-    
-    cost = calculate_rental_cost(car['price_per_day'], req.days, req.insurance, req.driver_required)
-    
-    car['is_available'] = False
-    
-    rental = {
-        'rental_id': rental_counter,
-        'customer_name': req.customer_name,
-        'car_id': req.car_id,
-        'car_model': car['model'],
-        'car_brand': car['brand'],
-        'days': req.days,
-        'cost': cost,
-        'status': 'active',
-    }
-    
-    rentals.append(rental)
-    rental_counter += 1
+
+    async with booking_lock:
+        car = find_car(req.car_id)
+        if not car:
+            response.status_code = status.HTTP_404_NOT_FOUND
+            return {'error': 'Car not found'}
+        
+        if not car['is_available']:
+            return {'error': 'Car not available'}
+        
+        cost = calculate_rental_cost(car['price_per_day'], req.days, req.insurance, req.driver_required)
+        
+        car['is_available'] = False
+        
+        rental = {
+            'rental_id': rental_counter,
+            'customer_name': req.customer_name,
+            'car_id': req.car_id,
+            'car_model': car['model'],
+            'car_brand': car['brand'],
+            'days': req.days,
+            'cost': cost,
+            'status': 'active',
+        }
+        
+        rentals.append(rental)
+        rental_counter += 1
     
     return rental
 
